@@ -1,0 +1,48 @@
+@'
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# 数据库文件
+*.db
+*.sqlite
+
+# 忽略备份文件和备份文件夹
+backups/
+*.db.backup*
+*.json
+
+# 忽略临时压缩包和下载文件
+*.zip
+*.7z
+
+# 忽略临时数据文件夹
+ecdict_data/
+ecdict_extracted/
+ecdict-sqlite-28/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python脚本和测试文件
+*.py
+*.bat
+*.log
+
+# 导出文件
+*.json
+*.png
+'@ | Out-File -FilePath .gitignore -Encoding UTF8 -Force
