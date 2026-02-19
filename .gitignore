@@ -1,4 +1,3 @@
-@'
 # Python缓存
 __pycache__/
 *.py[cod]
@@ -16,7 +15,6 @@ ENV/
 # 忽略备份文件和备份文件夹
 backups/
 *.db.backup*
-*.json
 
 # 忽略临时压缩包和下载文件
 *.zip
@@ -41,8 +39,10 @@ Thumbs.db
 *.py
 *.bat
 *.log
+requirements.txt
 
 # 导出文件
 *.json
-*.png
-'@ | Out-File -FilePath .gitignore -Encoding UTF8 -Force
+
+# 允许的文件
+!test_local_storage.html
