@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>英语学习助手控制台</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f7;
+      }
+      header {
+        background: #1a73e8;
+        color: #fff;
+        padding: 16px 24px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      main {
+        max-width: 960px;
+        margin: 24px auto;
+        padding: 0 16px 32px;
+      }
+      .section {
+        background: #fff;
+        border-radius: 10px;
+        padding: 20px 24px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
+      }
+      .section h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        color: #202124;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+      }
+      .stat-card {
+        background: #f8f9fb;
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      .stat-label {
+        font-size: 13px;
+        color: #5f6368;
+        margin-bottom: 6px;
+      }
+      .stat-value {
+        font-size: 20px;
+        font-weight: 600;
+        color: #1a73e8;
+      }
+      .review-card {
+        border-radius: 10px;
+        border: 1px solid #e0e0e0;
+        background: #fff;
+        padding: 18px 20px;
+      }
+      .review-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .review-word {
+        font-size: 24px;
+        font-weight: 600;
+        color: #202124;
+      }
+      .review-phonetic {
+        font-size: 14px;
+        color: #5f6368;
+        margin-top: 4px;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e8f0fe;
+        color: #1a73e8;
+        font-size: 12px;
+      }
+      .review-section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #5f6368;
+        margin: 14px 0 6px;
+      }
+      .definition-item {
+        font-size: 14px;
+        color: #202124;
+        padding: 4px 0;
+      }
+      .definition-item strong {
+        color: #1a73e8;
+        margin-right: 4px;
+      }
+      .mnemonic-item {
+        font-size: 13px;
+        color: #202124;
+        padding: 4px 0;
+      }
+      .mnemonic-item + .mnemonic-item {
+        border-top: 1px dashed #e0e0e0;
+        margin-top: 4px;
+        padding-top: 6px;
+      }
+      .review-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+      }
+      .btn {
+        border: none;
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 14px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: background 0.2s, box-shadow 0.2s, transform 0.05s;
+      }
+      .btn-primary {
+        background: #1a73e8;
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #1557b0;
+        box-shadow: 0 2px 6px rgba(26, 115, 232, 0.35);
+      }
+      .btn-secondary {
+        background: #f1f3f4;
+        color: #202124;
+      }
+      .btn-secondary:hover {
+        background: #e4e6e8;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: #5f6368;
+      }
+      .btn-ghost:hover {
+        background: #f1f3f4;
+      }
+      .btn:active {
+        transform: translateY(1px);
+        box-shadow: none;
+      }
+      .review-status {
+        font-size: 13px;
+        color: #5f6368;
+        margin-top: 8px;
+      }
+      .empty-state {
+        text-align: center;
+        padding: 32px 16px;
+        color: #5f6368;
+        font-size: 14px;
+      }
+      .empty-state h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        color: #202124;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        background: #e8f0fe;
+        color: #1a73e8;
+        margin-left: 4px;
+      }
+      .muted {
+        color: #9aa0a6;
+      }
+      @media (max-width: 600px) {
+        .review-header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🎯 英语学习助手控制台</h1>
+    </header>
+    <main>
+      <section class="section">
+        <h2>学习统计概览</h2>
+        <div id="statsContainer" class="stats-grid">
+          <button class="stat-card" data-category="all" style="cursor:pointer;border:none;text-align:left;background:#f8f9fb;">
+            <div class="stat-label">总单词数</div>
+            <div class="stat-value" id="statTotalWords">-</div>
+          </button>
+          <button class="stat-card" data-category="mastered" style="cursor:pointer;border:none;text-align:left;background:#f8f9fb;">
+            <div class="stat-label">已掌握单词</div>
+            <div class="stat-value" id="statMasteredWords">-</div>
+          </button>
+          <button class="stat-card" data-category="review_due" style="cursor:pointer;border:none;text-align:left;background:#f8f9fb;">
+            <div class="stat-label">待复习单词</div>
+            <div class="stat-value" id="statWordsToReview">-</div>
+          </button>
+          <button class="stat-card" data-category="has_mnemonic" style="cursor:pointer;border:none;text-align:left;background:#f8f9fb;">
+            <div class="stat-label">自定义联想记忆</div>
+            <div class="stat-value" id="statCustomMnemonics">-</div>
+          </button>
+          <div class="stat-card">
+            <div class="stat-label">总复习次数</div>
+            <div class="stat-value" id="statTotalReviews">-</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2>今日复习</h2>
+          <button id="refreshReviewBtn" class="btn btn-secondary">
+            🔄 刷新待复习列表
+          </button>
+        </div>
+
+        <div id="reviewContainer" class="review-card" style="margin-top: 12px;"></div>
+      </section>
+    </main>
+
+    <script>
+      const API_BASE = "";
+
+      async function fetchJson(path, options = {}) {
+        const resp = await fetch(API_BASE + path, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => "");
+          throw new Error(text || resp.statusText);
+        }
+        return resp.json();
+      }
+
+      async function loadStatistics() {
+        try {
+          const stats = await fetchJson("/api/statistics");
+          document.getElementById("statTotalWords").textContent =
+            stats.total_words ?? 0;
+          document.getElementById("statMasteredWords").textContent =
+            stats.mastered_words ?? 0;
+          document.getElementById("statWordsToReview").textContent =
+            stats.words_to_review ?? 0;
+          document.getElementById("statCustomMnemonics").textContent =
+            stats.custom_mnemonics ?? 0;
+          document.getElementById("statTotalReviews").textContent =
+            stats.total_reviews ?? 0;
+        } catch (e) {
+          console.error("加载统计失败", e);
+        }
+      }
+
+      async function loadNextReviewWord() {
+        const container = document.getElementById("reviewContainer");
+        container.innerHTML =
+          '<div class="empty-state"><p>加载中...</p></div>';
+
+        try {
+          const list = await fetchJson("/api/review/list?limit=1");
+          if (!list.words || list.words.length === 0) {
+            container.innerHTML =
+              '<div class="empty-state"><h3>当前没有需要复习的单词</h3><p class="muted">可以在浏览器中多多查词、添加联想记忆，为以后复习积累素材。</p></div>';
+            return;
+          }
+          const wordItem = list.words[0];
+          const wordDetail = await fetchJson(
+            "/api/word/" + encodeURIComponent(wordItem.word)
+          );
+          renderReviewCard(wordDetail);
+        } catch (e) {
+          console.error("加载复习单词失败", e);
+          container.innerHTML =
+            '<div class="empty-state"><h3>加载失败</h3><p class="muted">' +
+            (e.message || "请检查本地服务器是否已启动。") +
+            "</p></div>";
+        }
+      }
+
+      function renderReviewCard(data) {
+        const container = document.getElementById("reviewContainer");
+
+        const defs = (data.definitions || []).slice(0, 3);
+        const customMnemonics = data.custom_mnemonics || [];
+
+        let defsHtml = "";
+        defs.forEach((def) => {
+          defsHtml +=
+            '<div class="definition-item"><strong>' +
+            (def.part_of_speech || def.pos || "") +
+            "</strong>" +
+            (def.meaning || def.def || "") +
+            "</div>";
+        });
+
+        if (!defsHtml) {
+          defsHtml =
+            '<div class="definition-item muted">暂无释义，请稍后重试或手动添加。</div>';
+        }
+
+        let mnsHtml = "";
+        if (customMnemonics.length > 0) {
+          customMnemonics.forEach((m, idx) => {
+            mnsHtml +=
+              '<div class="mnemonic-item">' +
+              (idx + 1) +
+              ". " +
+              (m.text || "") +
+              (m.explanation
+                ? '<div class="muted" style="margin-top:2px;">' +
+                  m.explanation +
+                  "</div>"
+                : "") +
+              "</div>";
+          });
+        } else {
+          mnsHtml =
+            '<div class="mnemonic-item muted">还没有自定义联想记忆，可以在浏览器插件或这里添加。</div>';
+        }
+
+        container.innerHTML =
+          '<div class="review-header">' +
+          '<div>' +
+          '<button class="review-word" style="background:none;border:none;padding:0;margin:0;cursor:pointer;color:#1a73e8;text-align:left;">' +
+          data.word +
+          "</button>" +
+          (data.phonetic
+            ? '<div class="review-phonetic">/' + data.phonetic + "/</div>"
+            : "") +
+          "</div>" +
+          '<div class="tag">复习次数 ' +
+          (data.review_count ?? 0) +
+          "</div>" +
+          "</div>" +
+          '<div class="review-section-title">📖 常见释义</div>' +
+          defsHtml +
+          '<div class="review-section-title">💡 联想记忆 <span class="badge">自定义</span></div>' +
+          '<div id="mnemonicToggle" class="muted" style="font-size:13px;cursor:pointer;">已保存 ' +
+          customMnemonics.length +
+          ' 条联想记忆，点击展开</div>' +
+          '<div id="mnemonicContent" style="display:none;margin-top:8px;">' +
+          mnsHtml +
+          "</div>" +
+          '<div class="review-actions">' +
+          '<button class="btn btn-primary" data-difficulty="1">很容易</button>' +
+          '<button class="btn btn-secondary" data-difficulty="2">一般</button>' +
+          '<button class="btn btn-secondary" data-difficulty="3">有点难</button>' +
+          '<button class="btn btn-ghost" data-difficulty="4">完全忘了</button>' +
+          '<button class="btn btn-secondary" id="addMnemonicBtn">➕ 添加联想记忆</button>' +
+          '<button class="btn btn-ghost" id="skipReviewBtn">跳过</button>' +
+          "</div>" +
+          '<div class="review-status">根据你的选择系统会自动调整下次复习时间。</div>';
+
+        const wordButton = container.querySelector(".review-word");
+        if (wordButton) {
+          wordButton.addEventListener("click", () => {
+            window.open(
+              "/dashboard/word/" + encodeURIComponent(data.word),
+              "_blank"
+            );
+          });
+        }
+
+        const toggle = document.getElementById("mnemonicToggle");
+        const mnemonicContent = document.getElementById("mnemonicContent");
+        if (toggle && mnemonicContent) {
+          toggle.addEventListener("click", () => {
+            const isHidden = mnemonicContent.style.display === "none";
+            mnemonicContent.style.display = isHidden ? "block" : "none";
+            toggle.textContent = isHidden
+              ? "点击收起联想记忆"
+              : `已保存 ${customMnemonics.length} 条联想记忆，点击展开`;
+          });
+        }
+
+        const addBtn = document.getElementById("addMnemonicBtn");
+        if (addBtn) {
+          addBtn.addEventListener("click", async () => {
+            const text = prompt("请输入联想记忆内容：");
+            if (!text || !text.trim()) {
+              return;
+            }
+            const explanation = prompt("可以添加一个解释（可选）：") || "";
+            try {
+              await fetchJson("/api/mnemonic", {
+                method: "POST",
+                body: JSON.stringify({
+                  word: data.word,
+                  mnemonic: text.trim(),
+                  explanation: explanation.trim(),
+                  private: false,
+                }),
+              });
+              alert("联想记忆添加成功！");
+              const refreshed = await fetchJson(
+                "/api/word/" + encodeURIComponent(data.word)
+              );
+              renderReviewCard(refreshed);
+            } catch (e) {
+              console.error("添加联想记忆失败", e);
+              alert("添加失败，请检查本地服务器。");
+            }
+          });
+        }
+
+        container
+          .querySelectorAll("button[data-difficulty]")
+          .forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const difficulty = parseInt(btn.dataset.difficulty, 10);
+              btn.disabled = true;
+              try {
+                await fetchJson("/api/review", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    word: data.word,
+                    difficulty,
+                  }),
+                });
+                await loadStatistics();
+                await loadNextReviewWord();
+              } catch (e) {
+                console.error("记录复习失败", e);
+                btn.disabled = false;
+              }
+            });
+          });
+
+        const skipBtn = document.getElementById("skipReviewBtn");
+        if (skipBtn) {
+          skipBtn.addEventListener("click", () => {
+            loadNextReviewWord();
+          });
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        loadStatistics();
+        loadNextReviewWord();
+        // 统计卡片点击跳转到单词列表
+        document.querySelectorAll(".stat-card[data-category]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const category = el.dataset.category;
+            window.open("/dashboard/words/" + category, "_blank");
+          });
+        });
+        document
+          .getElementById("refreshReviewBtn")
+          .addEventListener("click", () => {
+            loadStatistics();
+            loadNextReviewWord();
+          });
+      });
+    </script>
+  </body>
+</html>
+
