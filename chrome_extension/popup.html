@@ -274,6 +274,111 @@
         color: #1a73e8;
         font-weight: bold;
       }
+
+      /* 标签切换样式 */
+      .tabs {
+        display: flex;
+        margin-bottom: 15px;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .tab-btn {
+        flex: 1;
+        padding: 10px;
+        background: #f5f5f5;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+
+      .tab-btn:hover {
+        background: #e9ecef;
+      }
+
+      .tab-btn.active {
+        background: white;
+        border-bottom-color: #1a73e8;
+        color: #1a73e8;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* 翻译功能样式 */
+      .translate-container {
+        width: 100%;
+      }
+
+      .lang-selector {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        gap: 10px;
+      }
+
+      .lang-selector select {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 13px;
+        background: white;
+      }
+
+      .swap-btn {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+
+      .swap-btn:hover {
+        background: #f5f5f5;
+      }
+
+      .translate-input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        resize: vertical;
+        min-height: 100px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+      }
+
+      .translate-result {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        min-height: 100px;
+        white-space: pre-wrap;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .translate-result.loading {
+        text-align: center;
+        color: #666;
+      }
+
+      .translate-result.error {
+        color: #d32f2f;
+      }
     </style>
   </head>
   <body>
@@ -281,14 +386,74 @@
       <h3>🎯 英语学习助手</h3>
     </div>
 
-    <div class="search-container">
-      <input
-        type="text"
-        class="search-input"
-        id="wordInput"
-        placeholder="请输入单词..."
-      />
-      <button class="btn" id="searchBtn">查询单词</button>
+    <!-- 功能切换标签 -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="word">单词查询</button>
+      <button class="tab-btn" data-tab="translate">文本翻译</button>
+      <button class="tab-btn" data-tab="review">单词复习</button>
+    </div>
+
+    <!-- 单词查询面板 -->
+    <div class="tab-panel active" id="word-panel">
+      <div class="search-container">
+        <input
+          type="text"
+          class="search-input"
+          id="wordInput"
+          placeholder="请输入单词..."
+        />
+        <button class="btn" id="searchBtn">查询单词</button>
+      </div>
+    </div>
+
+    <!-- 翻译面板 -->
+    <div class="tab-panel" id="translate-panel">
+      <div class="translate-container">
+        <div class="lang-selector">
+          <select id="sourceLang">
+            <option value="auto">自动检测</option>
+            <option value="zh">中文</option>
+            <option value="en">英语</option>
+            <option value="ja">日语</option>
+            <option value="ko">韩语</option>
+            <option value="fr">法语</option>
+            <option value="de">德语</option>
+            <option value="ru">俄语</option>
+            <option value="es">西班牙语</option>
+          </select>
+          <button class="swap-btn" id="swapLangs">↔️</button>
+          <select id="targetLang">
+            <option value="en">英语</option>
+            <option value="zh">中文</option>
+            <option value="ja">日语</option>
+            <option value="ko">韩语</option>
+            <option value="fr">法语</option>
+            <option value="de">德语</option>
+            <option value="ru">俄语</option>
+            <option value="es">西班牙语</option>
+          </select>
+        </div>
+        <textarea
+          class="translate-input"
+          id="translateInput"
+          placeholder="请输入要翻译的文本..."
+          rows="4"
+        ></textarea>
+        <button class="btn" id="translateBtn">翻译</button>
+        <div class="translate-result" id="translateResult"></div>
+      </div>
+    </div>
+
+    <!-- 复习面板 -->
+    <div class="tab-panel" id="review-panel">
+      <div id="reviewContent" class="result-container" style="padding: 0; box-shadow: none; background: transparent;">
+        <div class="loading-message" id="reviewLoadingMessage" style="display: none;">
+          加载中...
+        </div>
+        <div class="error-message" id="reviewErrorMessage" style="display: none;">
+        </div>
+        <div id="reviewCardContainer"></div>
+      </div>
     </div>
 
     <div id="result" class="result-container">
