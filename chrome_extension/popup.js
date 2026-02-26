@@ -1,8 +1,447 @@
+// 翻译服务类
+class TranslationService {
+  constructor() {
+    this.apiKey = "6e1c0a345e9cd475f1919dc5af1dc43e";
+    this.apiUrl = "https://trans.neo.edu.cn/transTextTranslation";
+  }
+
+  /**
+   * 翻译文本
+   * @param {string} text - 要翻译的文本
+   * @param {string} from - 源语言代码 (默认: 'auto')
+   * @param {string} to - 目标语言代码 (默认: 'en')
+   * @returns {Promise<string>} - 翻译结果
+   */
+  async translate(text, from = "auto", to = "en") {
+    try {
+      const response = await fetch(`${this.apiUrl}?apikey=${this.apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from,
+          to: to,
+          src_text: text,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 200 && data.data && data.data.length > 0) {
+          const sentences = data.data[0].sentences;
+          if (sentences && sentences.length > 0) {
+            return sentences[0].data;
+          }
+        }
+        throw new Error("翻译失败: 无效的响应格式");
+      } else {
+        throw new Error(`翻译失败: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error("翻译API错误:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 检测语言
+   * @param {string} text - 要检测的文本
+   * @returns {Promise<string>} - 语言代码
+   */
+  async detectLanguage(text) {
+    try {
+      // 由于API不直接提供语言检测功能，我们使用翻译API的auto检测
+      const response = await fetch(`${this.apiUrl}?apikey=${this.apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "auto",
+          to: "en",
+          src_text: text,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 200 && data.data && data.data.length > 0) {
+          const sentences = data.data[0].sentences;
+          if (sentences && sentences.length > 0) {
+            return sentences[0].sourceLanguageAbbreviation;
+          }
+        }
+        throw new Error("语言检测失败: 无效的响应格式");
+      } else {
+        throw new Error(
+          `语言检测失败: ${response.status} ${response.statusText}`
+        );
+      }
+    } catch (error) {
+      console.error("语言检测API错误:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 批量翻译
+   * @param {string[]} texts - 要翻译的文本数组
+   * @param {string} from - 源语言代码
+   * @param {string} to - 目标语言代码
+   * @returns {Promise<string[]>} - 翻译结果数组
+   */
+  async batchTranslate(texts, from = "auto", to = "en") {
+    const promises = texts.map((text) => this.translate(text, from, to));
+    return Promise.all(promises);
+  }
+
+  /**
+   * 获取支持的语言列表
+   * @returns {Object} - 支持的语言列表
+   */
+  getSupportedLanguages() {
+    return {
+      auto: "自动检测",
+      zh: "中文",
+      en: "英语",
+      ja: "日语",
+      ko: "韩语",
+      fr: "法语",
+      de: "德语",
+      ru: "俄语",
+      es: "西班牙语",
+      ar: "阿拉伯语",
+      pt: "葡萄牙语",
+      it: "意大利语",
+      nl: "荷兰语",
+      pl: "波兰语",
+      th: "泰语",
+      vi: "越南语",
+      id: "印尼语",
+      ms: "马来语",
+      hi: "印地语",
+    };
+  }
+}
+
+// 创建翻译服务实例
+const translationService = new TranslationService();
+
 document.addEventListener("DOMContentLoaded", function () {
   // 获取DOM元素
   const wordInput = document.getElementById("wordInput");
   const searchBtn = document.getElementById("searchBtn");
   const resultDiv = document.getElementById("result");
+
+  // 翻译功能元素
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabPanels = document.querySelectorAll(".tab-panel");
+  const sourceLang = document.getElementById("sourceLang");
+  const targetLang = document.getElementById("targetLang");
+  const swapLangsBtn = document.getElementById("swapLangs");
+  const translateInput = document.getElementById("translateInput");
+  const translateBtn = document.getElementById("translateBtn");
+  const translateResult = document.getElementById("translateResult");
+
+  // 复习功能元素
+  const reviewLoading = document.getElementById("reviewLoadingMessage");
+  const reviewError = document.getElementById("reviewErrorMessage");
+  const reviewCardContainer = document.getElementById("reviewCardContainer");
+
+  // 标签切换功能
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const tab = this.dataset.tab;
+
+      // 更新标签状态
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      this.classList.add("active");
+
+      // 更新面板状态
+      tabPanels.forEach((panel) => panel.classList.remove("active"));
+      document.getElementById(`${tab}-panel`).classList.add("active");
+
+      // 切换到复习面板时，自动加载待复习单词
+      if (tab === "review") {
+        loadNextReviewWord();
+      }
+    });
+  });
+
+  // 语言切换按钮
+  swapLangsBtn.addEventListener("click", function () {
+    const temp = sourceLang.value;
+    sourceLang.value = targetLang.value;
+    targetLang.value = temp;
+  });
+
+  // 翻译按钮点击事件
+  translateBtn.addEventListener("click", translateText);
+
+  // 回车键翻译
+  translateInput.addEventListener("keypress", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      translateText();
+    }
+  });
+
+  // 翻译文本函数
+  async function translateText() {
+    const text = translateInput.value.trim();
+    const from = sourceLang.value;
+    const to = targetLang.value;
+
+    if (!text) {
+      translateResult.innerHTML = '<div class="error">请输入要翻译的文本</div>';
+      return;
+    }
+
+    // 显示加载状态
+    translateResult.innerHTML = '<div class="loading">翻译中...</div>';
+
+    try {
+      console.log("开始翻译请求:", {
+        text: text,
+        from: from,
+        to: to,
+        apiUrl: translationService.apiUrl,
+      });
+
+      const result = await translationService.translate(text, from, to);
+      console.log("翻译成功:", result);
+      translateResult.textContent = result;
+    } catch (error) {
+      console.error("翻译错误:", error);
+
+      let errorMessage = "翻译失败";
+      if (error.message) {
+        errorMessage += ": " + error.message;
+      }
+
+      // 添加网络连接提示
+      if (error.message === "Failed to fetch") {
+        errorMessage +=
+          "<br>请确保您已连接到校园网或使用VPN，并且可以访问 trans.neo.edu.cn";
+      }
+
+      translateResult.innerHTML = `<div class="error">${errorMessage}</div>`;
+    }
+  }
+
+  // ===== 单词复习相关逻辑 =====
+
+  function calcReviewPriority(item) {
+    const reviewCount = Number(item.review_count || 0);
+    const masterLevel = Number(item.master_level || 0);
+    const hasMnemonic = Number(item.custom_mnemonics_count || 0) > 0;
+
+    // 行业常见做法：优先低掌握度 + 高遗忘风险词；无记忆线索词适当提前
+    let score = 0;
+    score += (1 - Math.min(Math.max(masterLevel, 0), 1)) * 100;
+    score += Math.min(reviewCount, 20) * 2;
+    if (!hasMnemonic) score += 10;
+
+    return score;
+  }
+
+  function pickBestReviewWord(words) {
+    if (!Array.isArray(words) || words.length === 0) return null;
+
+    const sorted = [...words].sort((a, b) => {
+      return calcReviewPriority(b) - calcReviewPriority(a);
+    });
+
+    return sorted[0] || null;
+  }
+
+  async function loadNextReviewWord() {
+    if (!reviewLoading || !reviewError || !reviewCardContainer) return;
+    reviewError.style.display = "none";
+    reviewLoading.style.display = "block";
+    reviewCardContainer.innerHTML = "";
+
+    try {
+      const resp = await fetch(
+        "http://127.0.0.1:5000/api/review/list?limit=20",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          mode: "cors",
+        }
+      );
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || resp.statusText);
+      }
+
+      const list = await resp.json();
+      if (!list.words || list.words.length === 0) {
+        reviewLoading.style.display = "none";
+        reviewCardContainer.innerHTML =
+          '<div class="loading-message">当前没有需要复习的单词。</div>';
+        return;
+      }
+
+      const item = pickBestReviewWord(list.words);
+      if (!item || !item.word) {
+        reviewLoading.style.display = "none";
+        reviewCardContainer.innerHTML =
+          '<div class="loading-message">当前没有可用复习词。</div>';
+        return;
+      }
+
+      const detailResp = await fetch(
+        `http://127.0.0.1:5000/api/word/${encodeURIComponent(item.word)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          mode: "cors",
+        }
+      );
+
+      if (!detailResp.ok) {
+        const text = await detailResp.text().catch(() => "");
+        throw new Error(text || detailResp.statusText);
+      }
+
+      const detail = await detailResp.json();
+      renderReviewCard(detail);
+    } catch (e) {
+      reviewCardContainer.innerHTML = "";
+      reviewError.style.display = "block";
+      reviewError.textContent =
+        "加载复习单词失败，请检查本地服务器是否已启动。";
+      console.error("加载复习单词失败:", e);
+    } finally {
+      reviewLoading.style.display = "none";
+    }
+  }
+
+  function renderReviewCard(data) {
+    if (!reviewCardContainer) return;
+
+    const defs = (data.definitions || []).slice(0, 3);
+    const customMnemonics = data.custom_mnemonics || [];
+
+    let defsHtml = "";
+    defs.forEach((def) => {
+      defsHtml += `<li><strong>${def.part_of_speech || def.pos || ""}</strong>: ${
+        def.meaning || def.def || ""
+      }</li>`;
+    });
+    if (!defsHtml) {
+      defsHtml =
+        '<li class="mnemonic-content">暂无释义，请稍后重试或手动添加。</li>';
+    }
+
+    let mnsHtml = "";
+    if (customMnemonics.length > 0) {
+      mnsHtml = customMnemonics
+        .map(
+          (m, index) => `
+          <li>
+            <div class="mnemonic-content">${index + 1}. ${m.text || ""}</div>
+            ${
+              m.explanation
+                ? `<div class="mnemonic-explanation">${m.explanation}</div>`
+                : ""
+            }
+          </li>
+        `
+        )
+        .join("");
+    } else {
+      mnsHtml =
+        '<li class="mnemonic-content">还没有自定义联想记忆，可以在网页或这里添加。</li>';
+    }
+
+    reviewCardContainer.innerHTML = `
+      <div class="card-header">
+        <div class="word-info">
+          <h3 class="word">${data.word}</h3>
+          ${
+            data.phonetic
+              ? `<div class="phonetic">${data.phonetic}</div>`
+              : ""
+          }
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-section">
+          <h4>📖 常见释义</h4>
+          <ul class="meanings-list">
+            ${defsHtml}
+          </ul>
+        </div>
+        <div class="card-section">
+          <h4>💡 联想记忆</h4>
+          <div class="mnemonics-list">
+            <div id="popupMnemonicToggle" class="mnemonic-content" style="cursor:pointer;">
+              已保存 ${customMnemonics.length} 条联想记忆，点击展开
+            </div>
+            <ul id="popupMnemonicContent" style="display:none;margin-top:6px;">
+              ${mnsHtml}
+            </ul>
+          </div>
+        </div>
+        <div class="card-section">
+          <h4>📊 学习统计</h4>
+          <div class="review-stats">
+            <div class="stat-item">
+              <span class="stat-label">复习次数:</span>
+              <span class="stat-value">${data.review_count ?? 0}</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-btn primary review-diff-btn" data-word="${
+            data.word
+          }" data-difficulty="1">很容易</button>
+          <button class="action-btn review-diff-btn" data-word="${
+            data.word
+          }" data-difficulty="2">一般</button>
+          <button class="action-btn review-diff-btn" data-word="${
+            data.word
+          }" data-difficulty="3">有点难</button>
+          <button class="action-btn review-diff-btn" data-word="${
+            data.word
+          }" data-difficulty="4">完全忘了</button>
+          <button class="action-btn add-mnemonic-btn" data-word="${
+            data.word
+          }">➕ 添加联想记忆</button>
+        </div>
+      </div>
+    `;
+
+    const toggle = document.getElementById("popupMnemonicToggle");
+    const content = document.getElementById("popupMnemonicContent");
+    if (toggle && content) {
+      toggle.addEventListener("click", () => {
+        const hidden = content.style.display === "none";
+        content.style.display = hidden ? "block" : "none";
+        toggle.textContent = hidden
+          ? "点击收起联想记忆"
+          : `已保存 ${customMnemonics.length} 条联想记忆，点击展开`;
+      });
+    }
+  }
+
+  function hasValidDefinitions(data) {
+    if (!data || !Array.isArray(data.definitions) || data.definitions.length === 0) {
+      return false;
+    }
+
+    return data.definitions.some((def) => {
+      const meaning = (def && (def.meaning || def.def) ? String(def.meaning || def.def) : "").trim();
+      return meaning.length > 0;
+    });
+  }
 
   // 单词查询函数
   async function searchWord() {
@@ -33,6 +472,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (response.ok) {
         const data = await response.json();
+
+        if (!hasValidDefinitions(data)) {
+          resultDiv.innerHTML =
+            '<div class="error-message">未找到该单词释义，该词不会加入复习计划。</div>';
+          return;
+        }
+
         displayResult(data);
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -165,6 +611,37 @@ document.addEventListener("DOMContentLoaded", function () {
       recordReview(word);
     }
   });
+
+  // 复习卡片中的难度按钮
+  if (reviewCardContainer) {
+    reviewCardContainer.addEventListener("click", function (e) {
+      const target = e.target;
+      if (target.classList.contains("review-diff-btn")) {
+        const word = target.dataset.word;
+        const difficulty = parseInt(target.dataset.difficulty || "2", 10);
+        (async () => {
+          try {
+            await fetch("http://127.0.0.1:5000/api/review", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                word: word,
+                difficulty: difficulty,
+              }),
+              mode: "cors",
+            });
+            alert("复习记录成功！");
+            loadNextReviewWord();
+          } catch (error) {
+            console.error("❌ 记录复习出错:", error);
+            alert("记录失败，请检查服务器连接。");
+          }
+        })();
+      }
+    });
+  }
 
   // 显示添加联想记忆表单
   function showAddMnemonicForm(word) {

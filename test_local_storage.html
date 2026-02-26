@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试本地存储功能</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0069d9;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>测试本地存储功能</h1>
+    
+    <div class="test-section">
+        <h2>测试1: 存储单词数据</h2>
+        <button onclick="testSaveWordData()">保存单词数据</button>
+        <div id="test1-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试2: 读取单词数据</h2>
+        <button onclick="testGetWordData()">读取单词数据</button>
+        <div id="test2-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试3: 清除存储</h2>
+        <button onclick="testClearStorage()">清除所有存储</button>
+        <div id="test3-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试4: 查看存储状态</h2>
+        <button onclick="testStorageStatus()">查看存储状态</button>
+        <div id="test4-result" class="result"></div>
+    </div>
+
+    <script>
+        // 模拟保存单词数据
+        function testSaveWordData() {
+            const word = "example";
+            const data = {
+                "word": "example",
+                "phonetic": "/ɪɡˈzɑːmpl/",
+                "definitions": [
+                    {
+                        "pos": "noun",
+                        "def": "代表群体中所有此类事物的事物。"
+                    }
+                ],
+                "examples": [
+                    {
+                        "english": "This is an example of modern art.",
+                        "chinese": "这是现代艺术的一个例子。"
+                    }
+                ],
+                "custom_mnemonics": []
+            };
+            
+            try {
+                const storageKey = `word_data_${word.toLowerCase()}`;
+                localStorage.setItem(storageKey, JSON.stringify(data));
+                document.getElementById('test1-result').innerHTML = `<strong>成功:</strong> 单词 "${word}" 已保存到本地存储`;
+            } catch (error) {
+                document.getElementById('test1-result').innerHTML = `<strong>错误:</strong> ${error.message}`;
+            }
+        }
+        
+        // 模拟读取单词数据
+        function testGetWordData() {
+            const word = "example";
+            
+            try {
+                const storageKey = `word_data_${word.toLowerCase()}`;
+                const storedData = localStorage.getItem(storageKey);
+                
+                if (storedData) {
+                    const data = JSON.parse(storedData);
+                    document.getElementById('test2-result').innerHTML = 
+                        `<strong>成功:</strong> 从本地存储读取到单词 "${word}"<br>
+                        音标: ${data.phonetic}<br>
+                        释义: ${data.definitions[0].def}<br>
+                        例句: ${data.examples[0].english}`;
+                } else {
+                    document.getElementById('test2-result').innerHTML = `<strong>提示:</strong> 本地存储中没有单词 "${word}"`;
+                }
+            } catch (error) {
+                document.getElementById('test2-result').innerHTML = `<strong>错误:</strong> ${error.message}`;
+            }
+        }
+        
+        // 测试清除存储
+        function testClearStorage() {
+            try {
+                localStorage.clear();
+                document.getElementById('test3-result').innerHTML = `<strong>成功:</strong> 本地存储已清除`;
+            } catch (error) {
+                document.getElementById('test3-result').innerHTML = `<strong>错误:</strong> ${error.message}`;
+            }
+        }
+        
+        // 测试存储状态
+        function testStorageStatus() {
+            try {
+                let status = `<strong>存储状态:</strong><br>`;
+                status += `存储键数量: ${localStorage.length}<br>`;
+                status += `存储容量: ${JSON.stringify(localStorage).length} 字节<br>`;
+                
+                // 列出所有存储的单词
+                const wordKeys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('word_data_')) {
+                        wordKeys.push(key.replace('word_data_', ''));
+                    }
+                }
+                
+                if (wordKeys.length > 0) {
+                    status += `已存储的单词: ${wordKeys.join(', ')}`;
+                } else {
+                    status += `没有存储的单词数据`;
+                }
+                
+                document.getElementById('test4-result').innerHTML = status;
+            } catch (error) {
+                document.getElementById('test4-result').innerHTML = `<strong>错误:</strong> ${error.message}`;
+            }
+        }
+        
+        // 页面加载时自动检查存储状态
+        window.onload = function() {
+            testStorageStatus();
+        };
+    </script>
+</body>
+</html>

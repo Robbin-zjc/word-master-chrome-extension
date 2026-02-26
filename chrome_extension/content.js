@@ -4,7 +4,68 @@
  * 版本：1.0
  */
 
+// 翻译服务类
+class TranslationService {
+  constructor() {
+    this.apiKey = "6e1c0a345e9cd475f1919dc5af1dc43e";
+    this.apiUrl = "https://trans.neo.edu.cn/transTextTranslation";
+  }
+
+  /**
+   * 翻译文本
+   * @param {string} text - 要翻译的文本
+   * @param {string} from - 源语言代码 (默认: 'auto')
+   * @param {string} to - 目标语言代码 (默认: 'en')
+   * @returns {Promise<string>} - 翻译结果
+   */
+  async translate(text, from = "auto", to = "en") {
+    try {
+      const response = await fetch(`${this.apiUrl}?apikey=${this.apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from,
+          to: to,
+          src_text: text,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 200 && data.data && data.data.length > 0) {
+          const sentences = data.data[0].sentences;
+          if (sentences && sentences.length > 0) {
+            return sentences[0].data;
+          }
+        }
+        throw new Error("翻译失败: 无效的响应格式");
+      } else {
+        throw new Error(`翻译失败: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error("翻译API错误:", error);
+      throw error;
+    }
+  }
+}
+
+// 创建翻译服务实例
+const translationService = new TranslationService();
+
 class VideoWordAssistant {
+  hasValidDefinitions(wordData) {
+    if (!wordData || !Array.isArray(wordData.definitions) || wordData.definitions.length === 0) {
+      return false;
+    }
+
+    return wordData.definitions.some((def) => {
+      const definitionText = (def && (def.meaning || def.def) ? String(def.meaning || def.def) : "").trim();
+      return definitionText.length > 0;
+    });
+  }
+
   constructor() {
     this.serverUrl = "http://127.0.0.1:5000";
     this.isServerConnected = false;
@@ -399,6 +460,12 @@ class VideoWordAssistant {
         const data = await response.json();
         console.log("📚 单词查询结果:", data);
 
+        if (!this.hasValidDefinitions(data)) {
+          console.log("⚠️ 本地服务未返回有效释义，视为不存在单词:", word);
+          this.showWordCardLocal(word);
+          return;
+        }
+
         // 保存到本地存储
         this.saveWordDataToLocal(word, data);
         console.log("💾 单词数据已保存到本地存储:", word);
@@ -444,6 +511,12 @@ class VideoWordAssistant {
         // 转换数据格式
         const formattedData = this.formatOnlineDictionaryData(word, data);
         console.log("📋 格式化后的数据:", formattedData);
+
+        if (!this.hasValidDefinitions(formattedData)) {
+          console.log("⚠️ 在线词典也未返回有效释义，视为不存在单词:", word);
+          this.showWordCardLocal(word);
+          return;
+        }
 
         // 保存到本地存储
         this.saveWordDataToLocal(word, formattedData);
@@ -632,6 +705,7 @@ class VideoWordAssistant {
         <div class="card-actions">
           <button class="action-btn primary add-mnemonic-btn">➕ 添加联想记忆</button>
           <button class="action-btn record-review-btn">📊 记录复习</button>
+          <button class="action-btn translate-btn">🌐 翻译单词</button>
         </div>
       </div>
     `;
@@ -666,6 +740,14 @@ class VideoWordAssistant {
     if (recordReviewBtn) {
       recordReviewBtn.addEventListener("click", () => {
         this.recordReview(word);
+      });
+    }
+
+    // 绑定翻译按钮
+    const translateBtn = this.wordCardElement.querySelector(".translate-btn");
+    if (translateBtn) {
+      translateBtn.addEventListener("click", () => {
+        this.translateWord(word);
       });
     }
 
@@ -710,9 +792,9 @@ class VideoWordAssistant {
       </div>
       <div class="card-body">
         <div class="card-section">
-          <h4>⚠️ 服务器未连接</h4>
-          <p>请确保本地服务器已启动，然后重试。</p>
-          <p>启动方法：运行 start.bat 文件</p>
+          <h4>⚠️ 暂无可用释义</h4>
+          <p>本地词库和在线词典都没有找到该词条，系统不会保存该单词，也不会加入复习计划。</p>
+          <p>若你确认拼写无误，可稍后重试。</p>
         </div>
         <div class="card-actions">
           <button class="action-btn primary check-server-btn">🔄 检查连接</button>
@@ -1057,6 +1139,86 @@ class VideoWordAssistant {
     } catch (error) {
       console.error("❌ 添加到生词本出错:", error);
       alert("添加失败，请检查服务器连接。");
+    }
+  }
+
+  /**
+   * 翻译单词
+   */
+  async translateWord(word) {
+    try {
+      console.log("🌐 翻译单词:", word);
+
+      // 显示翻译中状态
+      const originalText =
+        this.wordCardElement.querySelector(".translate-btn").textContent;
+      this.wordCardElement.querySelector(".translate-btn").textContent =
+        "翻译中...";
+      this.wordCardElement.querySelector(".translate-btn").disabled = true;
+
+      // 自动检测语言并翻译
+      const zhTranslation = await translationService.translate(
+        word,
+        "auto",
+        "zh"
+      );
+      const enTranslation = await translationService.translate(
+        word,
+        "auto",
+        "en"
+      );
+
+      // 恢复按钮状态
+      this.wordCardElement.querySelector(".translate-btn").textContent =
+        originalText;
+      this.wordCardElement.querySelector(".translate-btn").disabled = false;
+
+      // 显示翻译结果
+      let translationHtml = `
+        <div class="card-section">
+          <h4>🌐 单词翻译</h4>
+          <div class="translation-results">
+            <div class="translation-item">
+              <strong>中文:</strong> ${zhTranslation}
+            </div>
+            <div class="translation-item">
+              <strong>英语:</strong> ${enTranslation}
+            </div>
+          </div>
+        </div>
+      `;
+
+      // 插入到卡片中
+      const cardBody = this.wordCardElement.querySelector(".card-body");
+      const cardActions = this.wordCardElement.querySelector(".card-actions");
+      cardBody.insertBefore(
+        document.createRange().createContextualFragment(translationHtml),
+        cardActions
+      );
+
+      console.log("✅ 单词翻译成功");
+    } catch (error) {
+      console.error("❌ 单词翻译失败:", error);
+
+      let errorMessage = "翻译失败";
+      if (error.message) {
+        errorMessage += ": " + error.message;
+      }
+
+      // 添加网络连接提示
+      if (error.message === "Failed to fetch") {
+        errorMessage +=
+          "\n请确保您已连接到校园网或使用VPN，并且可以访问 trans.neo.edu.cn";
+      }
+
+      alert(errorMessage);
+
+      // 恢复按钮状态
+      if (this.wordCardElement.querySelector(".translate-btn")) {
+        this.wordCardElement.querySelector(".translate-btn").textContent =
+          "🌐 翻译单词";
+        this.wordCardElement.querySelector(".translate-btn").disabled = false;
+      }
     }
   }
 
@@ -1469,6 +1631,28 @@ class VideoWordAssistant {
         font-size: 13px;
         color: #1a73e8;
         font-weight: bold;
+      }
+
+      /* 翻译结果样式 */
+      .translation-results {
+        padding: 10px;
+        background: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      .translation-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 14px;
+      }
+
+      .translation-item:last-child {
+        border-bottom: none;
+      }
+
+      .translation-item strong {
+        color: #1a73e8;
+        margin-right: 8px;
       }
 
       /* 响应式设计 */
