@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>单词详情 - {{ word }}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f7;
+      }
+      header {
+        background: #1a73e8;
+        color: #fff;
+        padding: 12px 20px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      }
+      main {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 0 16px 32px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        padding: 20px 22px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 16px 0 8px;
+      }
+      .phonetic {
+        margin-top: 4px;
+        color: #5f6368;
+      }
+      .section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #5f6368;
+        margin: 16px 0 6px;
+      }
+      ul {
+        padding-left: 18px;
+      }
+      .muted {
+        color: #9aa0a6;
+        font-size: 13px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        background: #e8f0fe;
+        color: #1a73e8;
+        margin-left: 4px;
+      }
+      .stat-row {
+        display: flex;
+        gap: 16px;
+        margin-top: 4px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>单词详情：{{ word }}</h1>
+    </header>
+    <main>
+      <div id="content" class="card">
+        <p class="muted">加载中...</p>
+      </div>
+    </main>
+    <script>
+      async function loadWord() {
+        const container = document.getElementById("content");
+        try {
+          const resp = await fetch(
+            "/api/word/" + encodeURIComponent("{{ word }}")
+          );
+          if (!resp.ok) {
+            throw new Error(await resp.text());
+          }
+          const data = await resp.json();
+          renderWord(data);
+        } catch (e) {
+          container.innerHTML =
+            '<p class="muted">加载失败：' +
+            (e.message || "请检查本地服务器。") +
+            "</p>";
+        }
+      }
+
+      function renderWord(data) {
+        const container = document.getElementById("content");
+        const defs = data.definitions || [];
+        const examples = data.examples || [];
+        const customMnemonics = data.custom_mnemonics || [];
+
+        let defsHtml = "";
+        defs.forEach((def, idx) => {
+          defsHtml += `<li>[${def.part_of_speech || def.pos || ""}] ${
+            def.meaning || def.def || ""
+          }</li>`;
+        });
+        if (!defsHtml) {
+          defsHtml = '<li class="muted">暂无释义</li>';
+        }
+
+        let exHtml = "";
+        examples.forEach((ex, idx) => {
+          exHtml += `<li>${ex.english || ""}<br/><span class="muted">${
+            ex.chinese || ""
+          }</span></li>`;
+        });
+        if (!exHtml) {
+          exHtml = '<li class="muted">暂无例句</li>';
+        }
+
+        let mnsHtml = "";
+        if (customMnemonics.length > 0) {
+          mnsHtml = customMnemonics
+            .map(
+              (m, idx) => `<li>${idx + 1}. ${m.text || ""}${
+                m.explanation
+                  ? '<div class="muted">' + m.explanation + "</div>"
+                  : ""
+              }</li>`
+            )
+            .join("");
+        } else {
+          mnsHtml = '<li class="muted">暂无自定义联想记忆</li>';
+        }
+
+        container.innerHTML = `
+          <h2>${data.word}</h2>
+          ${
+            data.phonetic
+              ? '<div class="phonetic">/' + data.phonetic + "/</div>"
+              : ""
+          }
+          <div class="section-title">📊 学习状态</div>
+          <div class="stat-row">
+            <div>复习次数：<strong>${data.review_count ?? 0}</strong></div>
+            <div>掌握度：<strong>${Math.round(
+              (data.master_level || 0) * 100
+            )}%</strong></div>
+          </div>
+          <div class="section-title">📖 释义</div>
+          <ul>${defsHtml}</ul>
+          <div class="section-title">💬 例句</div>
+          <ul>${exHtml}</ul>
+          <div class="section-title">💡 自定义联想记忆<span class="badge">${
+            customMnemonics.length
+          } 条</span></div>
+          <ul>${mnsHtml}</ul>
+        `;
+      }
+
+      document.addEventListener("DOMContentLoaded", loadWord);
+    </script>
+  </body>
+</html>
+
