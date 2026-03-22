@@ -24,6 +24,36 @@
         font-size: 14px;
         margin-bottom: 10px;
       }
+      .similarity-hints {
+        margin-top: -2px;
+        margin-bottom: 10px;
+        border: 1px solid #eaeaea;
+        border-radius: 6px;
+        background: #fff;
+        max-height: 140px;
+        overflow-y: auto;
+        display: none;
+      }
+      .hint-item {
+        padding: 8px 10px;
+        border-bottom: 1px solid #f1f1f1;
+        font-size: 13px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .hint-item:last-child {
+        border-bottom: none;
+      }
+      .hint-item:hover,
+      .hint-item.active {
+        background: #e8f0fe;
+      }
+      .hint-score {
+        color: #888;
+        font-size: 12px;
+      }
       .btn {
         width: 100%;
         padding: 10px;
@@ -379,6 +409,51 @@
       .translate-result.error {
         color: #d32f2f;
       }
+
+      .review-filter-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .review-filter-row label {
+        font-size: 13px;
+        color: #333;
+        white-space: nowrap;
+      }
+      .review-day-select {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 13px;
+        background: #fff;
+      }
+      .review-filter-btn {
+        width: auto;
+        padding: 8px 12px;
+        margin: 0;
+        font-size: 13px;
+      }
+      .review-range-row {
+        display: flex;
+        gap: 6px;
+        margin: 4px 0 10px;
+      }
+      .review-range-btn {
+        flex: 1;
+        padding: 6px 0;
+        border: 1px solid #d9d9d9;
+        background: #fff;
+        border-radius: 14px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .review-range-btn.active {
+        border-color: #1a73e8;
+        color: #1a73e8;
+        background: #eef4ff;
+      }
     </style>
   </head>
   <body>
@@ -400,8 +475,9 @@
           type="text"
           class="search-input"
           id="wordInput"
-          placeholder="请输入单词..."
+          placeholder="请输入单词（支持模糊拼写）..."
         />
+        <div id="similarityHints" class="similarity-hints"></div>
         <button class="btn" id="searchBtn">查询单词</button>
       </div>
     </div>
@@ -446,6 +522,19 @@
 
     <!-- 复习面板 -->
     <div class="tab-panel" id="review-panel">
+      <div class="review-filter-row">
+        <label for="reviewDaySelect">按存入日期复习</label>
+        <select id="reviewDaySelect" class="review-day-select">
+          <option value="">全部日期</option>
+        </select>
+      </div>
+      <div class="review-range-row" id="reviewRangeRow">
+        <button class="review-range-btn" data-days="3">最近3天</button>
+        <button class="review-range-btn" data-days="7">最近7天</button>
+        <button class="review-range-btn" data-days="15">最近15天</button>
+        <button class="review-range-btn" data-days="30">最近30天</button>
+      </div>
+      <button class="btn" id="reviewFilterBtn">应用筛选</button>
       <div id="reviewContent" class="result-container" style="padding: 0; box-shadow: none; background: transparent;">
         <div class="loading-message" id="reviewLoadingMessage" style="display: none;">
           加载中...

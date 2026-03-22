@@ -56,18 +56,24 @@ const translationService = new TranslationService();
 
 class VideoWordAssistant {
   hasValidDefinitions(wordData) {
-    if (!wordData || !Array.isArray(wordData.definitions) || wordData.definitions.length === 0) {
+    if (
+      !wordData ||
+      !Array.isArray(wordData.definitions) ||
+      wordData.definitions.length === 0
+    ) {
       return false;
     }
 
     return wordData.definitions.some((def) => {
-      const definitionText = (def && (def.meaning || def.def) ? String(def.meaning || def.def) : "").trim();
+      const definitionText = (
+        def && (def.meaning || def.def) ? String(def.meaning || def.def) : ""
+      ).trim();
       return definitionText.length > 0;
     });
   }
 
   constructor() {
-    this.serverUrl = "http://127.0.0.1:5000";
+    this.serverUrl = "http://127.0.0.1:5001";
     this.isServerConnected = false;
     this.selectedText = "";
     this.menuElement = null;
@@ -227,7 +233,7 @@ class VideoWordAssistant {
 
     // 观察字幕容器
     const subtitleContainer = document.querySelector(
-      ".bpx-player-subtitle-panel-content"
+      ".bpx-player-subtitle-panel-content",
     );
     if (subtitleContainer) {
       observer.observe(subtitleContainer, {
@@ -332,7 +338,7 @@ class VideoWordAssistant {
         break;
       case "bilibili":
         const bilibiliSubtitles = document.querySelector(
-          ".bpx-player-subtitle-panel-content"
+          ".bpx-player-subtitle-panel-content",
         );
         if (bilibiliSubtitles) {
           subtitleText = bilibiliSubtitles.innerText;
@@ -437,14 +443,10 @@ class VideoWordAssistant {
       // 隐藏菜单
       this.hideQuickMenu();
 
-      // 先检查本地存储
-      const cachedData = this.getLocalWordData(word);
-      if (cachedData) {
-        console.log("⚡ 从本地存储获取单词数据:", word);
-        this.showWordCard(cachedData);
-      }
+      // 不使用本地缓存，直接从服务器获取最新数据（优先使用中文释义）
+      console.log("⚡ 直接从服务器获取单词数据:", word);
 
-      // 同时从服务器获取最新数据
+      // 从服务器获取最新数据
       const encodedWord = encodeURIComponent(word);
       const url = `${this.serverUrl}/api/word/${encodedWord}`;
 
@@ -470,21 +472,17 @@ class VideoWordAssistant {
         this.saveWordDataToLocal(word, data);
         console.log("💾 单词数据已保存到本地存储:", word);
 
-        // 如果之前没有缓存数据，或者数据有更新，重新显示卡片
-        if (!cachedData) {
-          this.showWordCard(data);
-        }
+        // 直接显示服务器返回的数据
+        this.showWordCard(data);
       } else {
         // 服务器返回错误，尝试使用在线词典API
         console.log("⚠️ 服务器返回错误，尝试使用在线词典API");
-        await this.fetchWordFromOnlineAPI(word, cachedData);
+        await this.fetchWordFromOnlineAPI(word, null);
       }
     } catch (error) {
       console.error("❌ 查询出错:", error);
-      // 如果没有缓存数据，尝试使用在线词典API
-      if (!this.getLocalWordData(word)) {
-        await this.fetchWordFromOnlineAPI(word, null);
-      }
+      // 尝试使用在线词典API
+      await this.fetchWordFromOnlineAPI(word, null);
     }
   }
 
@@ -648,7 +646,7 @@ class VideoWordAssistant {
             ${commonDefinitions
               .map(
                 (def) =>
-                  `<div class="meaning-item"><strong>${def.pos}</strong>: ${def.def}</div>`
+                  `<div class="meaning-item"><strong>${def.part_of_speech || def.pos}</strong>: ${def.meaning || def.def}</div>`,
               )
               .join("")}
           </div>
@@ -692,7 +690,7 @@ class VideoWordAssistant {
                   <button class="action-btn delete-btn" data-index="${index}">删除</button>
                 </div>
               </div>
-            `
+            `,
               )
               .join("")}
           </div>
@@ -934,7 +932,7 @@ class VideoWordAssistant {
           word,
           mnemonicText,
           mnemonicExplanation,
-          isPrivate
+          isPrivate,
         );
         formElement.parentNode.removeChild(formElement);
       } else {
@@ -1160,12 +1158,12 @@ class VideoWordAssistant {
       const zhTranslation = await translationService.translate(
         word,
         "auto",
-        "zh"
+        "zh",
       );
       const enTranslation = await translationService.translate(
         word,
         "auto",
-        "en"
+        "en",
       );
 
       // 恢复按钮状态
@@ -1193,7 +1191,7 @@ class VideoWordAssistant {
       const cardActions = this.wordCardElement.querySelector(".card-actions");
       cardBody.insertBefore(
         document.createRange().createContextualFragment(translationHtml),
-        cardActions
+        cardActions,
       );
 
       console.log("✅ 单词翻译成功");
