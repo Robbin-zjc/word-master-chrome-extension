@@ -163,6 +163,33 @@
         color: #5f6368;
         margin-top: 8px;
       }
+      .review-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .review-date-select {
+        min-width: 180px;
+        padding: 8px 10px;
+        border: 1px solid #d9dce1;
+        border-radius: 6px;
+        background: #fff;
+      }
+      .range-chip {
+        border: 1px solid #d9dce1;
+        background: #fff;
+        color: #202124;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .range-chip.active {
+        border-color: #1a73e8;
+        color: #1a73e8;
+        background: #e8f0fe;
+      }
       .empty-state {
         text-align: center;
         padding: 32px 16px;
@@ -227,11 +254,26 @@
       </section>
 
       <section class="section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
           <h2>今日复习</h2>
           <button id="refreshReviewBtn" class="btn btn-secondary">
             🔄 刷新待复习列表
           </button>
+        </div>
+
+        <div class="review-filters">
+          <select id="reviewTimeField" class="review-date-select" style="min-width: 160px;">
+            <option value="added">按存入时间</option>
+            <option value="next_review">按下次复习时间</option>
+          </select>
+          <select id="reviewDateSelect" class="review-date-select">
+            <option value="">按日期复习（全部）</option>
+          </select>
+          <button class="range-chip" data-range="3">最近3天</button>
+          <button class="range-chip" data-range="7">最近7天</button>
+          <button class="range-chip" data-range="15">最近15天</button>
+          <button class="range-chip" data-range="30">最近30天</button>
+          <button id="applyReviewFilterBtn" class="btn btn-secondary">应用筛选</button>
         </div>
 
         <div id="reviewContainer" class="review-card" style="margin-top: 12px;"></div>
@@ -240,6 +282,11 @@
 
     <script>
       const API_BASE = "";
+      let selectedReviewDate = "";
+      let selectedRangeDays = "";
+      let selectedTimeField = "added";
+      const recentlyReviewedMap = new Map();
+      const RECENTLY_REVIEWED_COOLDOWN_MS = 2 * 60 * 1000;
 
       async function fetchJson(path, options = {}) {
         const resp = await fetch(API_BASE + path, {
@@ -271,23 +318,183 @@
         }
       }
 
+      function hasValidDefinitions(data) {
+        if (!data || !Array.isArray(data.definitions) || data.definitions.length === 0) {
+          return false;
+        }
+        return data.definitions.some((def) => {
+          const text = String((def && (def.meaning || def.def)) || "").trim();
+          return text.length > 0;
+        });
+      }
+
+      function parseItemDate(item, timeField = selectedTimeField) {
+        const addedRaw =
+          item.added_at ||
+          item.created_at ||
+          item.created_time ||
+          item.inserted_at ||
+          item.added_date ||
+          item.created_date;
+        const nextRaw =
+          item.next_review_time ||
+          item.next_review_at ||
+          item.next_due_at ||
+          item.next_review_date;
+        const pickedRaw =
+          timeField === "next_review" ? nextRaw || addedRaw : addedRaw || nextRaw;
+        const raw = normalizeBackendTime(pickedRaw);
+        if (!raw) return null;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return null;
+        return d;
+      }
+
+      function normalizeBackendTime(raw) {
+        if (!raw || typeof raw !== "string") return raw;
+        // 兼容后端常见格式: 2026-02-28T11:50:51.205481 -> 2026-02-28T11:50:51.205
+        return raw.replace(/\.(\d{3})\d+/, ".$1");
+      }
+
+      function toLocalDayKey(dateObj) {
+        if (!dateObj) return "";
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const d = String(dateObj.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+
+      function filterReviewItems(items) {
+        let result = Array.isArray(items) ? items : [];
+
+        if (selectedRangeDays) {
+          const days = Number(selectedRangeDays);
+          const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
+          result = result.filter((item) => {
+            const d = parseItemDate(item);
+            return d && d.getTime() >= threshold;
+          });
+        }
+
+        if (selectedReviewDate) {
+          result = result.filter((item) => {
+            const d = parseItemDate(item);
+            return d && toLocalDayKey(d) === selectedReviewDate;
+          });
+        }
+
+        return result;
+      }
+
+      async function loadReviewDateOptions() {
+        const select = document.getElementById("reviewDateSelect");
+        if (!select) return;
+
+        const oldValue = selectedReviewDate;
+        const fieldLabel = selectedTimeField === "next_review" ? "按下次复习日期" : "按存入日期";
+        select.innerHTML = `<option value="">${fieldLabel}（全部）</option>`;
+
+        try {
+          const [reviewList, wordsResp] = await Promise.all([
+            fetchJson("/api/review/list?limit=2000").catch(() => ({ words: [] })),
+            fetchJson("/api/words?category=all").catch(() => ({ words: [] })),
+          ]);
+
+          const wordsFromReview = Array.isArray(reviewList.words) ? reviewList.words : [];
+          const wordsFromAll = Array.isArray(wordsResp.words) ? wordsResp.words : [];
+          const merged = [...wordsFromReview, ...wordsFromAll];
+          const dateSet = new Set();
+
+          merged.forEach((item) => {
+            const d = parseItemDate(item, selectedTimeField);
+            if (!d) return;
+            dateSet.add(toLocalDayKey(d));
+          });
+
+          [...dateSet].sort((a, b) => (a < b ? 1 : -1)).forEach((day) => {
+            const opt = document.createElement("option");
+            opt.value = day;
+            opt.textContent = day;
+            select.appendChild(opt);
+          });
+
+          if (oldValue && [...dateSet].includes(oldValue)) {
+            select.value = oldValue;
+          } else {
+            selectedReviewDate = "";
+          }
+        } catch (e) {
+          console.error("加载复习日期选项失败", e);
+        }
+      }
+
+      function isWordCoolingDown(word) {
+        if (!word) return false;
+        const ts = recentlyReviewedMap.get(String(word).toLowerCase());
+        if (!ts) return false;
+        return Date.now() - ts < RECENTLY_REVIEWED_COOLDOWN_MS;
+      }
+
+      function markWordReviewed(word) {
+        if (!word) return;
+        recentlyReviewedMap.set(String(word).toLowerCase(), Date.now());
+      }
+
       async function loadNextReviewWord() {
         const container = document.getElementById("reviewContainer");
         container.innerHTML =
           '<div class="empty-state"><p>加载中...</p></div>';
 
         try {
-          const list = await fetchJson("/api/review/list?limit=1");
-          if (!list.words || list.words.length === 0) {
+          const [reviewList, wordsResp] = await Promise.all([
+            fetchJson("/api/review/list?limit=2000").catch(() => ({ words: [] })),
+            fetchJson("/api/words?category=all").catch(() => ({ words: [] })),
+          ]);
+
+          const reviewWords = Array.isArray(reviewList.words) ? reviewList.words : [];
+          const allWords = Array.isArray(wordsResp.words) ? wordsResp.words : [];
+          const mergedMap = new Map();
+          [...reviewWords, ...allWords].forEach((item) => {
+            if (!item || !item.word) return;
+            const key = String(item.word).toLowerCase();
+            if (!mergedMap.has(key)) {
+              mergedMap.set(key, item);
+            }
+          });
+
+          const filtered = filterReviewItems(Array.from(mergedMap.values())).filter(
+            (item) => !isWordCoolingDown(item.word)
+          );
+
+          if (filtered.length === 0) {
+            const fieldText = selectedTimeField === "next_review" ? "下次复习时间" : "存入时间";
             container.innerHTML =
-              '<div class="empty-state"><h3>当前没有需要复习的单词</h3><p class="muted">可以在浏览器中多多查词、添加联想记忆，为以后复习积累素材。</p></div>';
+              '<div class="empty-state"><h3>当前筛选条件下没有可复习单词</h3><p class="muted">请切换' + fieldText + '维度、具体日期或最近天数筛选条件。</p></div>';
             return;
           }
-          const wordItem = list.words[0];
-          const wordDetail = await fetchJson(
-            "/api/word/" + encodeURIComponent(wordItem.word)
-          );
-          renderReviewCard(wordDetail);
+
+          let picked = null;
+          for (const wordItem of filtered) {
+            try {
+              const wordDetail = await fetchJson(
+                "/api/word/" + encodeURIComponent(wordItem.word)
+              );
+              if (hasValidDefinitions(wordDetail)) {
+                picked = wordDetail;
+                break;
+              }
+            } catch (_) {
+              // ignore and continue
+            }
+          }
+
+          if (!picked) {
+            container.innerHTML =
+              '<div class="empty-state"><h3>没有带释义的可复习单词</h3><p class="muted">无释义单词已自动排除，不会出现在复习列表。</p></div>';
+            return;
+          }
+
+          renderReviewCard(picked);
         } catch (e) {
           console.error("加载复习单词失败", e);
           container.innerHTML =
@@ -437,6 +644,7 @@
                     difficulty,
                   }),
                 });
+                markWordReviewed(data.word);
                 await loadStatistics();
                 await loadNextReviewWord();
               } catch (e) {
@@ -454,9 +662,11 @@
         }
       }
 
-      document.addEventListener("DOMContentLoaded", () => {
+      document.addEventListener("DOMContentLoaded", async () => {
         loadStatistics();
+        await loadReviewDateOptions();
         loadNextReviewWord();
+
         // 统计卡片点击跳转到单词列表
         document.querySelectorAll(".stat-card[data-category]").forEach((el) => {
           el.addEventListener("click", () => {
@@ -464,12 +674,59 @@
             window.open("/dashboard/words/" + category, "_blank");
           });
         });
-        document
-          .getElementById("refreshReviewBtn")
-          .addEventListener("click", () => {
-            loadStatistics();
+
+        const timeFieldSelect = document.getElementById("reviewTimeField");
+        const dateSelect = document.getElementById("reviewDateSelect");
+
+        if (timeFieldSelect) {
+          timeFieldSelect.addEventListener("change", async () => {
+            selectedTimeField = timeFieldSelect.value || "added";
+            selectedReviewDate = "";
+            selectedRangeDays = "";
+            if (dateSelect) dateSelect.value = "";
+            document.querySelectorAll(".range-chip").forEach((btn) => btn.classList.remove("active"));
+            await loadReviewDateOptions();
             loadNextReviewWord();
           });
+        }
+
+        if (dateSelect) {
+          dateSelect.addEventListener("change", () => {
+            selectedReviewDate = dateSelect.value || "";
+            if (selectedReviewDate) {
+              selectedRangeDays = "";
+              document.querySelectorAll(".range-chip").forEach((btn) => btn.classList.remove("active"));
+            }
+          });
+        }
+
+        document.querySelectorAll(".range-chip").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const isActive = btn.classList.contains("active");
+            document.querySelectorAll(".range-chip").forEach((b) => b.classList.remove("active"));
+            if (!isActive) {
+              btn.classList.add("active");
+              selectedRangeDays = btn.dataset.range || "";
+              selectedReviewDate = "";
+              if (dateSelect) dateSelect.value = "";
+            } else {
+              selectedRangeDays = "";
+            }
+          });
+        });
+
+        const applyBtn = document.getElementById("applyReviewFilterBtn");
+        if (applyBtn) {
+          applyBtn.addEventListener("click", () => {
+            loadNextReviewWord();
+          });
+        }
+
+        document.getElementById("refreshReviewBtn").addEventListener("click", async () => {
+          loadStatistics();
+          await loadReviewDateOptions();
+          loadNextReviewWord();
+        });
       });
     </script>
   </body>
