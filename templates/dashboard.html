@@ -190,6 +190,116 @@
         color: #1a73e8;
         background: #e8f0fe;
       }
+      
+      /* 自定义时间范围滑块样式 */
+      .custom-range-container {
+        margin: 15px 0;
+        padding: 16px;
+        background: #f8f9fb;
+        border-radius: 8px;
+        display: none;
+      }
+      
+      .custom-range-container.show {
+        display: block;
+      }
+      
+      .custom-range-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      
+      .custom-range-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #202124;
+      }
+      
+      .custom-range-dates {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: #1a73e8;
+        font-weight: 500;
+        margin-bottom: 12px;
+      }
+      
+      .slider-container {
+        position: relative;
+        height: 40px;
+        padding: 10px 0;
+      }
+      
+      .slider-track {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: #ddd;
+        border-radius: 2px;
+        transform: translateY(-50%);
+      }
+      
+      .slider-range {
+        position: absolute;
+        top: 50%;
+        height: 4px;
+        background: #1a73e8;
+        border-radius: 2px;
+        transform: translateY(-50%);
+      }
+      
+      .slider-handle {
+        position: absolute;
+        top: 50%;
+        width: 20px;
+        height: 20px;
+        background: #fff;
+        border: 2px solid #1a73e8;
+        border-radius: 50%;
+        cursor: grab;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+      
+      .slider-handle:active {
+        cursor: grabbing;
+      }
+      
+      .slider-handle::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        background: #1a73e8;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+      
+      .toggle-custom-range {
+        margin-top: 12px;
+        text-align: center;
+      }
+      
+      .toggle-custom-range button {
+        background: none;
+        border: none;
+        color: #1a73e8;
+        font-size: 13px;
+        cursor: pointer;
+        text-decoration: underline;
+        padding: 0;
+      }
+      
+      .toggle-custom-range button:hover {
+        color: #0d62d9;
+      }
       .empty-state {
         text-align: center;
         padding: 32px 16px;
@@ -263,8 +373,8 @@
 
         <div class="review-filters">
           <select id="reviewTimeField" class="review-date-select" style="min-width: 160px;">
-            <option value="added">按存入时间</option>
-            <option value="next_review">按下次复习时间</option>
+            <option value="added_date">按存入时间</option>
+            <option value="last_reviewed">按最后复习时间</option>
           </select>
           <select id="reviewDateSelect" class="review-date-select">
             <option value="">按日期复习（全部）</option>
@@ -276,6 +386,26 @@
           <button id="applyReviewFilterBtn" class="btn btn-secondary">应用筛选</button>
         </div>
 
+        <div class="toggle-custom-range">
+          <button id="toggleCustomRangeBtn">使用自定义时间范围</button>
+        </div>
+
+        <div id="customRangeContainer" class="custom-range-container">
+          <div class="custom-range-header">
+            <span class="custom-range-label">自定义时间范围</span>
+          </div>
+          <div class="custom-range-dates">
+            <span id="rangeStartLabel">暂无日期</span>
+            <span id="rangeEndLabel">暂无日期</span>
+          </div>
+          <div class="slider-container" id="sliderContainer">
+            <div class="slider-track"></div>
+            <div class="slider-range" id="sliderRange"></div>
+            <div class="slider-handle" id="startHandle"></div>
+            <div class="slider-handle" id="endHandle"></div>
+          </div>
+        </div>
+
         <div id="reviewContainer" class="review-card" style="margin-top: 12px;"></div>
       </section>
     </main>
@@ -284,9 +414,18 @@
       const API_BASE = "";
       let selectedReviewDate = "";
       let selectedRangeDays = "";
-      let selectedTimeField = "added";
+      let selectedTimeField = "added_date";
       const recentlyReviewedMap = new Map();
       const RECENTLY_REVIEWED_COOLDOWN_MS = 2 * 60 * 1000;
+      
+      // 自定义时间范围相关变量
+      let customRangeDates = [];
+      let customRangeStartIndex = 0;
+      let customRangeEndIndex = 0;
+      let customRangeActive = false;
+      let selectedCustomStartDaysAgo = 0;
+      let selectedCustomEndDaysAgo = 0;
+      let isDragging = null;
 
       async function fetchJson(path, options = {}) {
         const resp = await fetch(API_BASE + path, {
@@ -391,34 +530,21 @@
         if (!select) return;
 
         const oldValue = selectedReviewDate;
-        const fieldLabel = selectedTimeField === "next_review" ? "按下次复习日期" : "按存入日期";
+        const fieldLabel = selectedTimeField === "last_reviewed" ? "按最后复习日期" : "按存入日期";
         select.innerHTML = `<option value="">${fieldLabel}（全部）</option>`;
 
         try {
-          const [reviewList, wordsResp] = await Promise.all([
-            fetchJson("/api/review/list?limit=2000").catch(() => ({ words: [] })),
-            fetchJson("/api/words?category=all").catch(() => ({ words: [] })),
-          ]);
+          const resp = await fetchJson(`/api/review/dates?field=${encodeURIComponent(selectedTimeField)}`);
+          const dates = Array.isArray(resp.dates) ? resp.dates : [];
 
-          const wordsFromReview = Array.isArray(reviewList.words) ? reviewList.words : [];
-          const wordsFromAll = Array.isArray(wordsResp.words) ? wordsResp.words : [];
-          const merged = [...wordsFromReview, ...wordsFromAll];
-          const dateSet = new Set();
-
-          merged.forEach((item) => {
-            const d = parseItemDate(item, selectedTimeField);
-            if (!d) return;
-            dateSet.add(toLocalDayKey(d));
-          });
-
-          [...dateSet].sort((a, b) => (a < b ? 1 : -1)).forEach((day) => {
+          dates.forEach((day) => {
             const opt = document.createElement("option");
             opt.value = day;
             opt.textContent = day;
             select.appendChild(opt);
           });
 
-          if (oldValue && [...dateSet].includes(oldValue)) {
+          if (oldValue && dates.includes(oldValue)) {
             select.value = oldValue;
           } else {
             selectedReviewDate = "";
@@ -426,6 +552,156 @@
         } catch (e) {
           console.error("加载复习日期选项失败", e);
         }
+      }
+
+      // === 自定义时间范围双滑块功能 ===
+      // 这些DOM元素将在DOMContentLoaded后初始化
+      let toggleCustomRangeBtn, customRangeContainer, sliderContainer;
+      let startHandle, endHandle, sliderRange, startDateLabel, endDateLabel;
+
+      // 初始化自定义范围
+      async function initCustomRange() {
+        try {
+          const resp = await fetchJson(`/api/review/dates?field=${encodeURIComponent(selectedTimeField)}`);
+          customRangeDates = Array.isArray(resp.dates) ? resp.dates : [];
+
+          if (customRangeDates.length > 0) {
+            // 初始化索引
+            customRangeStartIndex = 0;
+            customRangeEndIndex = customRangeDates.length - 1;
+
+            // 更新滑块位置
+            updateSliderPositions();
+            updateDateLabels();
+          }
+        } catch (e) {
+          console.error("初始化自定义范围失败:", e);
+        }
+      }
+
+      // 更新滑块位置
+      function updateSliderPositions() {
+        if (!sliderContainer || !startHandle || !endHandle || !sliderRange) return;
+
+        const containerRect = sliderContainer.getBoundingClientRect();
+        const containerWidth = containerRect.width - 20;
+
+        if (customRangeDates.length <= 1) {
+          startHandle.style.left = "10px";
+          endHandle.style.left = `${containerWidth + 10}px`;
+          sliderRange.style.left = "10px";
+          sliderRange.style.width = `${containerWidth}px`;
+          return;
+        }
+
+        const startPercent = customRangeStartIndex / (customRangeDates.length - 1);
+        const endPercent = customRangeEndIndex / (customRangeDates.length - 1);
+
+        const startLeft = 10 + startPercent * containerWidth;
+        const endLeft = 10 + endPercent * containerWidth;
+
+        startHandle.style.left = `${startLeft}px`;
+        endHandle.style.left = `${endLeft}px`;
+        sliderRange.style.left = `${startLeft}px`;
+        sliderRange.style.width = `${endLeft - startLeft}px`;
+      }
+
+      // 更新日期标签
+      function updateDateLabels() {
+        if (!startDateLabel || !endDateLabel) return;
+
+        if (customRangeDates.length === 0) {
+          startDateLabel.textContent = "暂无日期";
+          endDateLabel.textContent = "暂无日期";
+          return;
+        }
+
+        startDateLabel.textContent = customRangeDates[customRangeStartIndex] || "";
+        endDateLabel.textContent = customRangeDates[customRangeEndIndex] || "";
+
+        // 计算天数差
+        if (customRangeDates[customRangeStartIndex] && customRangeDates[customRangeEndIndex]) {
+          const startDate = new Date(customRangeDates[customRangeStartIndex]);
+          const endDate = new Date(customRangeDates[customRangeEndIndex]);
+          const today = new Date();
+
+          selectedCustomEndDaysAgo = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+          selectedCustomStartDaysAgo = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
+
+          // 确保start <= end
+          if (selectedCustomStartDaysAgo > selectedCustomEndDaysAgo) {
+            [selectedCustomStartDaysAgo, selectedCustomEndDaysAgo] = [selectedCustomEndDaysAgo, selectedCustomStartDaysAgo];
+          }
+        }
+      }
+
+      // 获取鼠标在容器中的位置百分比
+      function getPositionPercent(e) {
+        if (!sliderContainer) return 0;
+
+        const containerRect = sliderContainer.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let percent = (clientX - containerRect.left - 10) / (containerRect.width - 20);
+
+        percent = Math.max(0, Math.min(1, percent));
+        return percent;
+      }
+
+      // 根据百分比获取索引
+      function getIndexFromPercent(percent) {
+        if (customRangeDates.length <= 1) return 0;
+        return Math.round(percent * (customRangeDates.length - 1));
+      }
+
+      // 拖动开始
+      function startDrag(handle, e) {
+        e.preventDefault();
+        isDragging = handle;
+
+        document.addEventListener("mousemove", drag);
+        document.addEventListener("mouseup", stopDrag);
+        document.addEventListener("touchmove", drag);
+        document.addEventListener("touchend", stopDrag);
+      }
+
+      // 拖动中
+      function drag(e) {
+        if (!isDragging) return;
+
+        const percent = getPositionPercent(e);
+        const index = getIndexFromPercent(percent);
+
+        if (isDragging === startHandle) {
+          if (index <= customRangeEndIndex) {
+            customRangeStartIndex = index;
+          } else {
+            // 交换手柄
+            customRangeStartIndex = customRangeEndIndex;
+            customRangeEndIndex = index;
+            isDragging = endHandle;
+          }
+        } else if (isDragging === endHandle) {
+          if (index >= customRangeStartIndex) {
+            customRangeEndIndex = index;
+          } else {
+            // 交换手柄
+            customRangeEndIndex = customRangeStartIndex;
+            customRangeStartIndex = index;
+            isDragging = startHandle;
+          }
+        }
+
+        updateSliderPositions();
+        updateDateLabels();
+      }
+
+      // 拖动结束
+      function stopDrag() {
+        isDragging = null;
+        document.removeEventListener("mousemove", drag);
+        document.removeEventListener("mouseup", stopDrag);
+        document.removeEventListener("touchmove", drag);
+        document.removeEventListener("touchend", stopDrag);
       }
 
       function isWordCoolingDown(word) {
@@ -446,28 +722,38 @@
           '<div class="empty-state"><p>加载中...</p></div>';
 
         try {
-          const [reviewList, wordsResp] = await Promise.all([
-            fetchJson("/api/review/list?limit=2000").catch(() => ({ words: [] })),
-            fetchJson("/api/words?category=all").catch(() => ({ words: [] })),
-          ]);
+          let filtered = [];
+          
+          // 根据选择的筛选方式获取单词
+          if (selectedReviewDate) {
+            // 按具体日期筛选
+            const resp = await fetchJson(
+              `/api/review/by-date?date=${encodeURIComponent(selectedReviewDate)}&field=${encodeURIComponent(selectedTimeField)}&limit=300`
+            );
+            filtered = Array.isArray(resp.words) ? resp.words : [];
+          } else if (customRangeActive) {
+            // 按自定义时间范围筛选
+            const resp = await fetchJson(
+              `/api/review/by-range?start=${selectedCustomStartDaysAgo}&end=${selectedCustomEndDaysAgo}&field=${encodeURIComponent(selectedTimeField)}&limit=300`
+            );
+            filtered = Array.isArray(resp.words) ? resp.words : [];
+          } else if (selectedRangeDays) {
+            // 按预设时间范围筛选
+            const days = Number(selectedRangeDays);
+            const resp = await fetchJson(
+              `/api/review/by-range?start=0&end=${days}&field=${encodeURIComponent(selectedTimeField)}&limit=300`
+            );
+            filtered = Array.isArray(resp.words) ? resp.words : [];
+          } else {
+            // 全部单词
+            const resp = await fetchJson("/api/review/list?limit=300");
+            filtered = Array.isArray(resp.words) ? resp.words : [];
+          }
 
-          const reviewWords = Array.isArray(reviewList.words) ? reviewList.words : [];
-          const allWords = Array.isArray(wordsResp.words) ? wordsResp.words : [];
-          const mergedMap = new Map();
-          [...reviewWords, ...allWords].forEach((item) => {
-            if (!item || !item.word) return;
-            const key = String(item.word).toLowerCase();
-            if (!mergedMap.has(key)) {
-              mergedMap.set(key, item);
-            }
-          });
-
-          const filtered = filterReviewItems(Array.from(mergedMap.values())).filter(
-            (item) => !isWordCoolingDown(item.word)
-          );
+          filtered = filtered.filter((item) => !isWordCoolingDown(item.word));
 
           if (filtered.length === 0) {
-            const fieldText = selectedTimeField === "next_review" ? "下次复习时间" : "存入时间";
+            const fieldText = selectedTimeField === "last_reviewed" ? "最后复习时间" : "存入时间";
             container.innerHTML =
               '<div class="empty-state"><h3>当前筛选条件下没有可复习单词</h3><p class="muted">请切换' + fieldText + '维度、具体日期或最近天数筛选条件。</p></div>';
             return;
@@ -663,6 +949,16 @@
       }
 
       document.addEventListener("DOMContentLoaded", async () => {
+        // 初始化自定义时间范围DOM元素
+        toggleCustomRangeBtn = document.getElementById("toggleCustomRangeBtn");
+        customRangeContainer = document.getElementById("customRangeContainer");
+        sliderContainer = document.getElementById("sliderContainer");
+        startHandle = document.getElementById("startHandle");
+        endHandle = document.getElementById("endHandle");
+        sliderRange = document.getElementById("sliderRange");
+        startDateLabel = document.getElementById("rangeStartLabel");
+        endDateLabel = document.getElementById("rangeEndLabel");
+        
         loadStatistics();
         await loadReviewDateOptions();
         loadNextReviewWord();
@@ -680,11 +976,14 @@
 
         if (timeFieldSelect) {
           timeFieldSelect.addEventListener("change", async () => {
-            selectedTimeField = timeFieldSelect.value || "added";
+            selectedTimeField = timeFieldSelect.value || "added_date";
             selectedReviewDate = "";
             selectedRangeDays = "";
+            customRangeActive = false;
             if (dateSelect) dateSelect.value = "";
             document.querySelectorAll(".range-chip").forEach((btn) => btn.classList.remove("active"));
+            if (customRangeContainer) customRangeContainer.classList.remove("show");
+            if (toggleCustomRangeBtn) toggleCustomRangeBtn.textContent = "使用自定义时间范围";
             await loadReviewDateOptions();
             loadNextReviewWord();
           });
@@ -695,7 +994,10 @@
             selectedReviewDate = dateSelect.value || "";
             if (selectedReviewDate) {
               selectedRangeDays = "";
+              customRangeActive = false;
               document.querySelectorAll(".range-chip").forEach((btn) => btn.classList.remove("active"));
+              if (customRangeContainer) customRangeContainer.classList.remove("show");
+              if (toggleCustomRangeBtn) toggleCustomRangeBtn.textContent = "使用自定义时间范围";
             }
           });
         }
@@ -708,12 +1010,49 @@
               btn.classList.add("active");
               selectedRangeDays = btn.dataset.range || "";
               selectedReviewDate = "";
+              customRangeActive = false;
               if (dateSelect) dateSelect.value = "";
+              if (customRangeContainer) customRangeContainer.classList.remove("show");
+              if (toggleCustomRangeBtn) toggleCustomRangeBtn.textContent = "使用自定义时间范围";
             } else {
               selectedRangeDays = "";
             }
           });
         });
+
+        // 切换自定义范围显示
+        if (toggleCustomRangeBtn && customRangeContainer) {
+          toggleCustomRangeBtn.addEventListener("click", async () => {
+            customRangeActive = !customRangeActive;
+
+            if (customRangeActive) {
+              customRangeContainer.classList.add("show");
+              toggleCustomRangeBtn.textContent = "隐藏自定义时间范围";
+
+              // 清除其他筛选
+              selectedReviewDate = "";
+              selectedRangeDays = "";
+              if (dateSelect) dateSelect.value = "";
+              document.querySelectorAll(".range-chip").forEach((btn) => btn.classList.remove("active"));
+
+              // 初始化自定义范围
+              await initCustomRange();
+            } else {
+              customRangeContainer.classList.remove("show");
+              toggleCustomRangeBtn.textContent = "使用自定义时间范围";
+              selectedCustomStartDaysAgo = 0;
+              selectedCustomEndDaysAgo = 0;
+            }
+          });
+        }
+
+        // 绑定拖动事件
+        if (startHandle && endHandle) {
+          startHandle.addEventListener("mousedown", (e) => startDrag(startHandle, e));
+          endHandle.addEventListener("mousedown", (e) => startDrag(endHandle, e));
+          startHandle.addEventListener("touchstart", (e) => startDrag(startHandle, e));
+          endHandle.addEventListener("touchstart", (e) => startDrag(endHandle, e));
+        }
 
         const applyBtn = document.getElementById("applyReviewFilterBtn");
         if (applyBtn) {

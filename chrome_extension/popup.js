@@ -150,6 +150,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const reviewError = document.getElementById("reviewErrorMessage");
   const reviewCardContainer = document.getElementById("reviewCardContainer");
   const reviewDaySelect = document.getElementById("reviewDaySelect");
+  const reviewDateField = document.getElementById("reviewDateField");
   const reviewFilterBtn = document.getElementById("reviewFilterBtn");
   const reviewRangeRow = document.getElementById("reviewRangeRow");
 
@@ -602,14 +603,15 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function loadReviewDayOptions() {
-    if (!reviewDaySelect) return;
+    if (!reviewDaySelect || !reviewDateField) return;
 
     const oldValue = reviewDaySelect.value;
     reviewDaySelect.innerHTML = '<option value="">全部日期</option>';
 
     try {
+      const dateField = reviewDateField.value || "added_date";
       const resp = await fetch(
-        "http://127.0.0.1:5001/api/review/list?limit=300",
+        `http://127.0.0.1:5001/api/review/dates?field=${encodeURIComponent(dateField)}`,
         {
           method: "GET",
           headers: {
@@ -621,20 +623,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (!resp.ok) return;
 
-      const list = await resp.json();
-      const words = (Array.isArray(list.words) ? list.words : []).filter(
-        (item) => isItemEligibleForLists(item),
-      );
-      const dateSet = new Set();
+      const data = await resp.json();
+      const dates = Array.isArray(data.dates) ? data.dates : [];
 
-      words.forEach((item) => {
-        const d = parseItemDate(item);
-        if (!d) return;
-        const day = d.toISOString().slice(0, 10);
-        dateSet.add(day);
-      });
-
-      [...dateSet]
+      dates
         .sort((a, b) => (a < b ? 1 : -1))
         .forEach((day) => {
           const opt = document.createElement("option");
@@ -643,7 +635,7 @@ document.addEventListener("DOMContentLoaded", function () {
           reviewDaySelect.appendChild(opt);
         });
 
-      if (oldValue && [...dateSet].includes(oldValue)) {
+      if (oldValue && dates.includes(oldValue)) {
         reviewDaySelect.value = oldValue;
         selectedReviewDate = oldValue;
       }
@@ -697,36 +689,93 @@ document.addEventListener("DOMContentLoaded", function () {
     reviewCardContainer.innerHTML = "";
 
     try {
-      const resp = await fetch(
-        "http://127.0.0.1:5001/api/review/list?limit=300",
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          mode: "cors",
-        },
-      );
+      const dateField = reviewDateField ? reviewDateField.value : "added_date";
+      let allWords = [];
 
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        throw new Error(text || resp.statusText);
+      // 根据选择的筛选方式获取单词
+      if (
+        useCustomRange &&
+        selectedCustomStartDaysAgo !== undefined &&
+        selectedCustomEndDaysAgo !== undefined
+      ) {
+        // 按自定义时间范围筛选
+        const resp = await fetch(
+          `http://127.0.0.1:5001/api/review/by-range?start=${selectedCustomStartDaysAgo}&end=${selectedCustomEndDaysAgo}&field=${encodeURIComponent(dateField)}&limit=300`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          },
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          allWords = Array.isArray(data.words) ? data.words : [];
+        }
+      } else if (selectedReviewDate) {
+        // 按具体日期筛选
+        const resp = await fetch(
+          `http://127.0.0.1:5001/api/review/by-date?date=${encodeURIComponent(selectedReviewDate)}&field=${encodeURIComponent(dateField)}&limit=300`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          },
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          allWords = Array.isArray(data.words) ? data.words : [];
+        }
+      } else if (selectedReviewRangeDays) {
+        // 按预设时间范围筛选
+        const days = Number(selectedReviewRangeDays);
+        const resp = await fetch(
+          `http://127.0.0.1:5001/api/review/by-range?start=0&end=${days}&field=${encodeURIComponent(dateField)}&limit=300`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          },
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          allWords = Array.isArray(data.words) ? data.words : [];
+        }
+      } else {
+        // 全部单词
+        const resp = await fetch(
+          "http://127.0.0.1:5001/api/review/list?limit=300",
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          },
+        );
+        if (resp.ok) {
+          const list = await resp.json();
+          allWords = Array.isArray(list.words) ? list.words : [];
+        }
       }
 
-      const list = await resp.json();
-      const allWords = Array.isArray(list.words) ? list.words : [];
       if (allWords.length === 0) {
         reviewLoading.style.display = "none";
         reviewCardContainer.innerHTML =
-          '<div class="loading-message">当前没有需要复习的单词。</div>';
+          '<div class="loading-message">当前筛选条件下没有需要复习的单词。</div>';
         return;
       }
 
-      const words = filterWordsBySelectedDate(allWords);
+      const words = allWords.filter((item) => isItemEligibleForLists(item));
       if (words.length === 0) {
         reviewLoading.style.display = "none";
         reviewCardContainer.innerHTML =
-          '<div class="loading-message">当前筛选日期下没有可复习单词。</div>';
+          '<div class="loading-message">当前筛选条件下没有可复习单词。</div>';
         return;
       }
 
@@ -1070,7 +1119,21 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  if (reviewFilterBtn && reviewDaySelect) {
+  if (reviewFilterBtn && reviewDaySelect && reviewDateField) {
+    // 时间字段选择变化时重新加载日期选项
+    reviewDateField.addEventListener("change", async () => {
+      selectedReviewDate = "";
+      selectedReviewRangeDays = "";
+      if (reviewDaySelect) reviewDaySelect.value = "";
+      if (reviewRangeRow) {
+        reviewRangeRow
+          .querySelectorAll(".review-range-btn")
+          .forEach((btn) => btn.classList.remove("active"));
+      }
+      await loadReviewDayOptions();
+      loadNextReviewWord();
+    });
+
     reviewFilterBtn.addEventListener("click", () => {
       selectedReviewDate = reviewDaySelect.value || "";
       loadNextReviewWord();
@@ -1309,5 +1372,251 @@ document.addEventListener("DOMContentLoaded", function () {
       console.error("❌ 记录复习出错:", error);
       alert("记录失败，请检查服务器连接。");
     }
+  }
+
+  // === 自定义时间范围双滑块功能 ===
+  let customRangeDates = [];
+  let customRangeStartIndex = 0;
+  let customRangeEndIndex = 0;
+  let useCustomRange = false;
+  let selectedCustomStartDaysAgo = 0;
+  let selectedCustomEndDaysAgo = 0;
+  let isDragging = null;
+
+  // 获取自定义时间范围相关DOM元素
+  const toggleCustomRangeBtn = document.getElementById("toggleCustomRange");
+  const customRangeContainer = document.getElementById("customRangeContainer");
+  const sliderContainer = document.getElementById("sliderContainer");
+  const startHandle = document.getElementById("startHandle");
+  const endHandle = document.getElementById("endHandle");
+  const sliderRange = document.getElementById("sliderRange");
+  const startDateLabel = document.getElementById("startDateLabel");
+  const endDateLabel = document.getElementById("endDateLabel");
+
+  // 切换自定义范围显示
+  if (toggleCustomRangeBtn && customRangeContainer) {
+    toggleCustomRangeBtn.addEventListener("click", async () => {
+      useCustomRange = !useCustomRange;
+
+      if (useCustomRange) {
+        customRangeContainer.classList.add("show");
+        toggleCustomRangeBtn.textContent = "隐藏自定义时间范围";
+
+        // 清除其他筛选
+        selectedReviewDate = "";
+        selectedReviewRangeDays = "";
+        if (reviewDaySelect) reviewDaySelect.value = "";
+        if (reviewRangeRow) {
+          reviewRangeRow
+            .querySelectorAll(".review-range-btn")
+            .forEach((btn) => btn.classList.remove("active"));
+        }
+
+        // 初始化自定义范围
+        await initCustomRange();
+      } else {
+        customRangeContainer.classList.remove("show");
+        toggleCustomRangeBtn.textContent = "使用自定义时间范围";
+        selectedCustomStartDaysAgo = 0;
+        selectedCustomEndDaysAgo = 0;
+      }
+    });
+  }
+
+  // 初始化自定义范围
+  async function initCustomRange() {
+    try {
+      const dateField = reviewDateField ? reviewDateField.value : "added_date";
+      const resp = await fetch(
+        `http://127.0.0.1:5001/api/review/dates?field=${encodeURIComponent(dateField)}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          mode: "cors",
+        },
+      );
+
+      if (resp.ok) {
+        const data = await resp.json();
+        customRangeDates = Array.isArray(data.dates) ? data.dates : [];
+
+        if (customRangeDates.length > 0) {
+          // 初始化索引
+          customRangeStartIndex = 0;
+          customRangeEndIndex = customRangeDates.length - 1;
+
+          // 更新滑块位置
+          updateSliderPositions();
+          updateDateLabels();
+        }
+      }
+    } catch (e) {
+      console.error("初始化自定义范围失败:", e);
+    }
+  }
+
+  // 更新滑块位置
+  function updateSliderPositions() {
+    if (!sliderContainer || !startHandle || !endHandle || !sliderRange) return;
+
+    const containerRect = sliderContainer.getBoundingClientRect();
+    const containerWidth = containerRect.width - 20; // 减去手柄宽度
+
+    if (customRangeDates.length <= 1) {
+      startHandle.style.left = "10px";
+      endHandle.style.left = `${containerWidth + 10}px`;
+      sliderRange.style.left = "10px";
+      sliderRange.style.width = `${containerWidth}px`;
+      return;
+    }
+
+    const startPercent = customRangeStartIndex / (customRangeDates.length - 1);
+    const endPercent = customRangeEndIndex / (customRangeDates.length - 1);
+
+    const startLeft = 10 + startPercent * containerWidth;
+    const endLeft = 10 + endPercent * containerWidth;
+
+    startHandle.style.left = `${startLeft}px`;
+    endHandle.style.left = `${endLeft}px`;
+    sliderRange.style.left = `${startLeft}px`;
+    sliderRange.style.width = `${endLeft - startLeft}px`;
+  }
+
+  // 更新日期标签
+  function updateDateLabels() {
+    if (!startDateLabel || !endDateLabel) return;
+
+    if (customRangeDates.length === 0) {
+      startDateLabel.textContent = "暂无日期";
+      endDateLabel.textContent = "暂无日期";
+      return;
+    }
+
+    startDateLabel.textContent = customRangeDates[customRangeStartIndex] || "";
+    endDateLabel.textContent = customRangeDates[customRangeEndIndex] || "";
+
+    // 计算天数差
+    if (
+      customRangeDates[customRangeStartIndex] &&
+      customRangeDates[customRangeEndIndex]
+    ) {
+      const startDate = new Date(customRangeDates[customRangeStartIndex]);
+      const endDate = new Date(customRangeDates[customRangeEndIndex]);
+      const today = new Date();
+
+      selectedCustomEndDaysAgo = Math.floor(
+        (today - startDate) / (1000 * 60 * 60 * 24),
+      );
+      selectedCustomStartDaysAgo = Math.floor(
+        (today - endDate) / (1000 * 60 * 60 * 24),
+      );
+
+      // 确保start <= end
+      if (selectedCustomStartDaysAgo > selectedCustomEndDaysAgo) {
+        [selectedCustomStartDaysAgo, selectedCustomEndDaysAgo] = [
+          selectedCustomEndDaysAgo,
+          selectedCustomStartDaysAgo,
+        ];
+      }
+    }
+  }
+
+  // 获取鼠标在容器中的位置百分比
+  function getPositionPercent(e) {
+    if (!sliderContainer) return 0;
+
+    const containerRect = sliderContainer.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    let percent =
+      (clientX - containerRect.left - 10) / (containerRect.width - 20);
+
+    percent = Math.max(0, Math.min(1, percent));
+    return percent;
+  }
+
+  // 根据百分比获取索引
+  function getIndexFromPercent(percent) {
+    if (customRangeDates.length <= 1) return 0;
+    return Math.round(percent * (customRangeDates.length - 1));
+  }
+
+  // 拖动开始
+  function startDrag(handle, e) {
+    e.preventDefault();
+    isDragging = handle;
+
+    document.addEventListener("mousemove", drag);
+    document.addEventListener("mouseup", stopDrag);
+    document.addEventListener("touchmove", drag);
+    document.addEventListener("touchend", stopDrag);
+  }
+
+  // 拖动中
+  function drag(e) {
+    if (!isDragging) return;
+
+    const percent = getPositionPercent(e);
+    const index = getIndexFromPercent(percent);
+
+    if (isDragging === startHandle) {
+      if (index <= customRangeEndIndex) {
+        customRangeStartIndex = index;
+      } else {
+        // 交换手柄
+        customRangeStartIndex = customRangeEndIndex;
+        customRangeEndIndex = index;
+        isDragging = endHandle;
+      }
+    } else if (isDragging === endHandle) {
+      if (index >= customRangeStartIndex) {
+        customRangeEndIndex = index;
+      } else {
+        // 交换手柄
+        customRangeEndIndex = customRangeStartIndex;
+        customRangeStartIndex = index;
+        isDragging = startHandle;
+      }
+    }
+
+    updateSliderPositions();
+    updateDateLabels();
+  }
+
+  // 拖动结束
+  function stopDrag() {
+    isDragging = null;
+    document.removeEventListener("mousemove", drag);
+    document.removeEventListener("mouseup", stopDrag);
+    document.removeEventListener("touchmove", drag);
+    document.removeEventListener("touchend", stopDrag);
+  }
+
+  // 绑定拖动事件
+  if (startHandle && endHandle) {
+    startHandle.addEventListener("mousedown", (e) => startDrag(startHandle, e));
+    endHandle.addEventListener("mousedown", (e) => startDrag(endHandle, e));
+    startHandle.addEventListener("touchstart", (e) =>
+      startDrag(startHandle, e),
+    );
+    endHandle.addEventListener("touchstart", (e) => startDrag(endHandle, e));
+  }
+
+  // 修改loadNextReviewWord函数以支持自定义范围
+  const originalLoadNextReviewWord = loadNextReviewWord;
+
+  // 重写应用筛选按钮事件
+  if (reviewFilterBtn) {
+    const originalListener = reviewFilterBtn.onclick;
+    reviewFilterBtn.onclick = null;
+    reviewFilterBtn.addEventListener("click", () => {
+      if (useCustomRange) {
+        selectedReviewDate = "";
+        selectedReviewRangeDays = "";
+        loadNextReviewWord();
+      } else {
+        selectedReviewDate = reviewDaySelect.value || "";
+        loadNextReviewWord();
+      }
+    });
   }
 });

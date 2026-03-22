@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -147,16 +147,6 @@
       .mnemonic-content {
         color: #555;
         line-height: 1.4;
-      }
-      .error-message {
-        color: #d32f2f;
-        text-align: center;
-        padding: 10px;
-      }
-      .loading-message {
-        text-align: center;
-        color: #666;
-        padding: 10px;
       }
       .error-message {
         color: #d32f2f;
@@ -454,6 +444,115 @@
         color: #1a73e8;
         background: #eef4ff;
       }
+
+      /* 自定义时间范围滑块样式 */
+      .custom-range-container {
+        margin: 10px 0 15px;
+        padding: 12px;
+        background: #f8f9fb;
+        border-radius: 8px;
+        display: none;
+      }
+
+      .custom-range-container.show {
+        display: block;
+      }
+
+      .custom-range-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .custom-range-label {
+        font-size: 13px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .custom-range-dates {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #1a73e8;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .slider-container {
+        position: relative;
+        height: 40px;
+        padding: 10px 0;
+      }
+
+      .slider-track {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: #ddd;
+        border-radius: 2px;
+        transform: translateY(-50%);
+      }
+
+      .slider-range {
+        position: absolute;
+        top: 50%;
+        height: 4px;
+        background: #1a73e8;
+        border-radius: 2px;
+        transform: translateY(-50%);
+      }
+
+      .slider-handle {
+        position: absolute;
+        top: 50%;
+        width: 20px;
+        height: 20px;
+        background: #fff;
+        border: 2px solid #1a73e8;
+        border-radius: 50%;
+        cursor: grab;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .slider-handle:active {
+        cursor: grabbing;
+      }
+
+      .slider-handle::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        background: #1a73e8;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .toggle-custom-range {
+        margin-top: 8px;
+        text-align: center;
+      }
+
+      .toggle-custom-range button {
+        background: none;
+        border: none;
+        color: #1a73e8;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      .toggle-custom-range button:hover {
+        color: #0d62d9;
+      }
     </style>
   </head>
   <body>
@@ -523,7 +622,14 @@
     <!-- 复习面板 -->
     <div class="tab-panel" id="review-panel">
       <div class="review-filter-row">
-        <label for="reviewDaySelect">按存入日期复习</label>
+        <label for="reviewDateField">时间字段:</label>
+        <select id="reviewDateField" class="review-day-select">
+          <option value="added_date">存入时间</option>
+          <option value="last_reviewed">最后复习时间</option>
+        </select>
+      </div>
+      <div class="review-filter-row">
+        <label for="reviewDaySelect">按日期复习:</label>
         <select id="reviewDaySelect" class="review-day-select">
           <option value="">全部日期</option>
         </select>
@@ -534,13 +640,46 @@
         <button class="review-range-btn" data-days="15">最近15天</button>
         <button class="review-range-btn" data-days="30">最近30天</button>
       </div>
+
+      <!-- 自定义时间范围滑块 -->
+      <div class="toggle-custom-range">
+        <button id="toggleCustomRange">使用自定义时间范围</button>
+      </div>
+
+      <div class="custom-range-container" id="customRangeContainer">
+        <div class="custom-range-header">
+          <span class="custom-range-label">自定义时间范围</span>
+        </div>
+        <div class="custom-range-dates">
+          <span id="startDateLabel">最早日期</span>
+          <span id="endDateLabel">最晚日期</span>
+        </div>
+        <div class="slider-container" id="sliderContainer">
+          <div class="slider-track"></div>
+          <div class="slider-range" id="sliderRange"></div>
+          <div class="slider-handle" id="startHandle"></div>
+          <div class="slider-handle" id="endHandle"></div>
+        </div>
+      </div>
+
       <button class="btn" id="reviewFilterBtn">应用筛选</button>
-      <div id="reviewContent" class="result-container" style="padding: 0; box-shadow: none; background: transparent;">
-        <div class="loading-message" id="reviewLoadingMessage" style="display: none;">
+      <div
+        id="reviewContent"
+        class="result-container"
+        style="padding: 0; box-shadow: none; background: transparent"
+      >
+        <div
+          class="loading-message"
+          id="reviewLoadingMessage"
+          style="display: none"
+        >
           加载中...
         </div>
-        <div class="error-message" id="reviewErrorMessage" style="display: none;">
-        </div>
+        <div
+          class="error-message"
+          id="reviewErrorMessage"
+          style="display: none"
+        ></div>
         <div id="reviewCardContainer"></div>
       </div>
     </div>
